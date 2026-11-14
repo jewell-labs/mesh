@@ -1,5 +1,5 @@
 {
   "id": "node",
-  "description": "Join, host stats, local models, and the call log on this computer.",
-  "tools": ["setup", "ping", "host", "models", "chat", "decide", "logs"]
+  "description": "Join, host stats, local models, evals, and the call log on this computer.",
+  "tools": ["setup", "ping", "host", "models", "chat", "decide", "evals", "logs"]
 }

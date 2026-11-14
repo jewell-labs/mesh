@@ -11,7 +11,15 @@ export interface Hit {
 
 const SKIP = new Set(["node_modules", ".git"]);
 
-function rules(): { name: string; test: (line: string) => boolean }[] {
+function suiteName(name: string): boolean {
+  const dir = ["te", "st"].join("");
+  const tests = ["__", "tests", "__"].join("");
+  const spec = [".spec.", "ts"].join("");
+  const unit = [".", ["te", "st"].join(""), ".", "ts"].join("");
+  return name === dir || name === tests || name.endsWith(spec) || name.endsWith(unit);
+}
+
+function rules(): { name: string; test: (file: string, line: string) => boolean }[] {
   const home = ["", "Users", "studio"].join("/");
   const journal = ["studio", "reset"].join("-");
   const other = ["flag", "seeker"].join("");
@@ -20,14 +28,18 @@ function rules(): { name: string; test: (line: string) => boolean }[] {
   const email = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
   const ref = ["op", ":/", "/"].join("");
   const allowedRef = `${ref}Mesh/`;
+  const quotedScript = `"${["te", "st"].join("")}"`;
+  const suiteImport = ["node:", ["te", "st"].join("")].join("");
+  const suiteCmd = ["node --", ["te", "st"].join("")].join("");
   return [
-    { name: "home", test: (line) => line.includes(home) },
-    { name: "journal", test: (line) => line.toLowerCase().includes(journal) },
-    { name: "other-product", test: (line) => line.toLowerCase().includes(other) },
-    { name: "magicdns", test: (line) => line.toLowerCase().includes(magic) },
-    { name: "stripe-account", test: (line) => line.includes(stripe) },
-    { name: "email", test: (line) => email.test(line) },
-    { name: "secret-ref", test: (line) => line.includes(ref) && !line.includes(allowedRef) },
+    { name: "home", test: (_file, line) => line.includes(home) },
+    { name: "journal", test: (_file, line) => line.toLowerCase().includes(journal) },
+    { name: "other-product", test: (_file, line) => line.toLowerCase().includes(other) },
+    { name: "magicdns", test: (_file, line) => line.toLowerCase().includes(magic) },
+    { name: "stripe-account", test: (_file, line) => line.includes(stripe) },
+    { name: "email", test: (_file, line) => email.test(line) },
+    { name: "secret-ref", test: (_file, line) => line.includes(ref) && !line.includes(allowedRef) },
+    { name: "suite", test: (file, line) => (file.endsWith("package.json") && line.includes(quotedScript) && line.includes(":")) || line.includes(suiteImport) || line.includes(suiteCmd) },
   ];
 }
 
@@ -37,7 +49,7 @@ export function scanText(file: string, text: string): Hit[] {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     for (const rule of rules()) {
-      if (rule.test(line)) hits.push({ file, line: index + 1, rule: rule.name });
+      if (rule.test(file, line)) hits.push({ file, line: index + 1, rule: rule.name });
     }
   }
   return hits;
@@ -50,6 +62,10 @@ export async function scanDir(root: string): Promise<Hit[]> {
     for (const entry of entries) {
       if (SKIP.has(entry.name)) continue;
       const full = path.join(dir, entry.name);
+      if (suiteName(entry.name)) {
+        hits.push({ file: path.relative(root, full), line: 1, rule: "suite" });
+        continue;
+      }
       if (entry.isDirectory()) {
         await walk(full);
         continue;

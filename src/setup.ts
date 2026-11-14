@@ -1,4 +1,4 @@
-import { AUTHKEY_REF, TAG, machineHostname } from "./names.ts";
+import { AUTHKEY_REF, TAG, TOOLS, machineHostname } from "./names.ts";
 import { renderContext, type NodeFacts, type Probe } from "./context.ts";
 
 export interface CommandResult {
@@ -51,7 +51,7 @@ export async function runSetup(env: SetupEnv, request: SetupRequest): Promise<Se
   const marker = `${request.stateDir}/ready`;
   if (await env.exists(marker)) {
     const facts = await env.facts();
-    const context = renderContext({ ...facts, hostname, probes: readyProbes(request.fixture), tools: [] });
+    const context = renderContext({ ...facts, hostname, probes: readyProbes(request.fixture), tools: [...TOOLS] });
     return { changed: false, context, commands: [], ok: true };
   }
 
@@ -69,7 +69,7 @@ export async function runSetup(env: SetupEnv, request: SetupRequest): Promise<Se
       });
       if (result.code !== 0) {
         const facts = await env.facts();
-        const context = renderContext({ ...facts, hostname, probes, tools: [] });
+        const context = renderContext({ ...facts, hostname, probes, tools: [...TOOLS] });
         await env.writeFile(`${request.stateDir}/context.md`, context);
         return { changed: true, context, commands, ok: false };
       }
@@ -79,7 +79,7 @@ export async function runSetup(env: SetupEnv, request: SetupRequest): Promise<Se
   }
 
   const facts = await env.facts();
-  const context = renderContext({ ...facts, hostname, probes, tools: [] });
+  const context = renderContext({ ...facts, hostname, probes, tools: [...TOOLS] });
   await env.writeFile(`${request.stateDir}/context.md`, context);
   await env.writeFile(marker, "ok\n");
   return { changed: true, context, commands: request.fixture ? [] : commands, ok: true };

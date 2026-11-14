@@ -6,7 +6,7 @@
       "ip": ["tcp:443"],
       "app": {
         "jewell-labs.com/cap/node": [
-          { "bot": "worker", "tools": ["setup", "ping", "host", "models", "chat", "decide", "logs"], "roles": ["node"] }
+          { "bot": "worker", "tools": ["setup", "ping", "host", "models", "chat", "decide", "evals", "logs"], "roles": ["node"] }
         ]
       }
     }

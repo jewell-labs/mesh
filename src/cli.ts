@@ -8,6 +8,7 @@ import { renderContext } from "./context.ts";
 import { createGateway } from "./gateway.ts";
 import { readLinux, type LinuxTexts, type NetCounters } from "./host.ts";
 import { TOOLS } from "./names.ts";
+import { DEFAULT_CHAT_URL, DEFAULT_DECIDE_URL, createRuntime, loopbackBase } from "./runtime.ts";
 import { runSetup, type CommandResult, type SetupEnv } from "./setup.ts";
 
 export interface CliIO {
@@ -98,16 +99,40 @@ export async function runCli(io: CliIO): Promise<number> {
       return 1;
     }
     const port = Number(flag(io.argv, "--port") ?? "8787");
+    const stateDir = flag(io.argv, "--state-dir") ?? path.join(os.homedir(), ".local", "state", "mesh");
+    let chatURL: string;
+    let decideURL: string;
+    try {
+      chatURL = loopbackBase(flag(io.argv, "--chat") ?? DEFAULT_CHAT_URL);
+      decideURL = loopbackBase(flag(io.argv, "--decide") ?? DEFAULT_DECIDE_URL);
+    } catch (error) {
+      io.stderr(`${error instanceof Error ? error.message : "bad model url"}\n`);
+      return 1;
+    }
+    const decideModel = flag(io.argv, "--decide-model");
+    const runtime = createRuntime({ chatURL, decideURL, ...(decideModel ? { decideModel } : {}) });
     const gateway = createGateway({
-      context: async () => renderContext({
-        os: os.platform(),
-        arch: os.arch(),
-        kind: "container",
-        userspace: true,
-        hostname: os.hostname(),
-        probes: [],
-        tools: [...TOOLS],
-      }),
+      context: async () => {
+        const saved = await readText(path.join(stateDir, "context.md"));
+        if (saved.trim() !== "") return saved;
+        return renderContext({
+          os: os.platform(),
+          arch: os.arch(),
+          kind: "container",
+          userspace: true,
+          hostname: os.hostname(),
+          probes: [],
+          tools: [...TOOLS],
+        });
+      },
+      ready: async () => {
+        try {
+          await access(path.join(stateDir, "ready"));
+          return true;
+        } catch {
+          return false;
+        }
+      },
       host: {
         async read(previous: NetCounters | null) {
           const texts: LinuxTexts = {
@@ -119,12 +144,15 @@ export async function runCli(io: CliIO): Promise<number> {
           return readLinux(texts, previous);
         },
       },
+      models: () => runtime.models(),
+      chat: (input) => runtime.chat(input),
+      decide: (input) => runtime.decide(input),
     });
     await gateway.listen(port);
     io.stdout(`listening ${host}:${port}\n`);
     return 0;
   }
-  io.stderr("usage: mesh setup [--fixture] [--state-dir DIR] [--port N]\n       mesh serve [--port N]\n");
+  io.stderr("usage: mesh setup [--fixture] [--state-dir DIR] [--port N]\n       mesh serve [--state-dir DIR] [--port N] [--chat URL] [--decide URL] [--decide-model ID]\n");
   return 2;
 }
 

@@ -8,4 +8,6 @@ Auth keys and service-account tokens stay in the environment or in 1Password. Th
 
 The Grok plugin node stays untagged. Tagging it makes the plugin report not connected. Every bot on that computer shares one node, so the gateway treats them as one caller.
 
-`npm run scan` fails the build when a file contains an email address, a MagicDNS name, a Stripe account id, a home path for a private host, or an `op://` reference outside `op://Mesh/`.
+`evals` runs on the node after setup. Completions go to a loopback chat server. Judgments go to a loopback decision server. The tool refuses any other host. It does not download weights and it does not send the task to a hosted judge.
+
+`npm run scan` fails when a file contains an email address, a MagicDNS name, a Stripe account id, a home path for a private host, or an `op://` reference outside `op://Mesh/`. It also fails when a test file or a test script is added. Behavior is validated by `evals`, not by a test suite.

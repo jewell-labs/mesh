@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport, type StreamableHTTPServerTransportOptions } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { readingText, runEvals, type DecisionQuestion } from "./evals.ts";
 import { allowedTools, parseGrant, type Grant } from "./grant.ts";
 import { collect, type HostSource, type Reading } from "./host.ts";
 import { CAPABILITY, TOOLS, type ToolName } from "./names.ts";
@@ -10,9 +11,10 @@ export interface GatewayDeps {
   readonly context: () => Promise<string>;
   readonly host: HostSource;
   readonly sleep?: (ms: number) => Promise<void>;
+  readonly ready?: () => Promise<boolean>;
   readonly models?: () => Promise<readonly { id: string; kind: "chat" | "decide"; present: boolean }[]>;
-  readonly chat?: (input: { model: string; messages: readonly { role: string; content: string }[] }) => Promise<string>;
-  readonly decide?: (input: { model: string; state: string; questions: readonly { name: string; type: string }[] }) => Promise<string>;
+  readonly chat?: (input: { model: string; messages: readonly { role: string; content: string }[]; maxTokens?: number }) => Promise<string>;
+  readonly decide?: (input: { model: string; state: string; questions: readonly DecisionQuestion[] }) => Promise<string>;
   readonly logs?: (summary: boolean) => Promise<string>;
 }
 
@@ -39,7 +41,7 @@ function buildServer(grant: Grant, deps: GatewayDeps): McpServer {
   const allow = allowedTools(grant);
   if (can(grant, "setup")) {
     server.registerTool("setup", {
-      description: "Read-only context for this computer: probes, tools, and limits. This call does not join the tailnet.",
+      description: "Read this first. Context, probes, and limits for this computer. Does not join the tailnet. Call evals last.",
       annotations: { readOnlyHint: true },
     }, async () => text(await deps.context()));
   }
@@ -72,6 +74,7 @@ function buildServer(grant: Grant, deps: GatewayDeps): McpServer {
       inputSchema: {
         model: z.string().min(1),
         messages: z.array(z.object({ role: z.enum(["system", "user", "assistant"]), content: z.string() })).min(1).max(32),
+        maxTokens: z.number().int().min(1).max(1024).default(512),
       },
     }, async (input) => {
       if (!deps.chat) return text(JSON.stringify({ state: "unavailable", reason: "no chat runtime" }));
@@ -83,12 +86,57 @@ function buildServer(grant: Grant, deps: GatewayDeps): McpServer {
       description: "One local decision. Unavailable when no decision runtime is configured.",
       inputSchema: {
         model: z.string().min(1),
-        state: z.string().max(16384),
-        questions: z.array(z.object({ name: z.string().min(1), type: z.enum(["noul", "choice", "score"]) })).min(1).max(16),
+        state: z.string().min(1).max(16384),
+        questions: z.array(z.object({
+          name: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
+          type: z.enum(["noul", "choice", "score"]),
+          instructions: z.string().min(1).max(1024),
+          criteria: z.array(z.string().min(1).max(80)).min(2).max(16).optional(),
+        })).min(1).max(16),
       },
     }, async (input) => {
       if (!deps.decide) return text(JSON.stringify({ state: "unavailable", reason: "no decision runtime" }));
-      return text(await deps.decide(input));
+      const questions: DecisionQuestion[] = input.questions.map((question) => {
+        const base = { name: question.name, type: question.type, instructions: question.instructions };
+        return question.criteria === undefined ? base : { ...base, criteria: question.criteria };
+      });
+      return text(await deps.decide({ model: input.model, state: input.state, questions }));
+    });
+  }
+  if (can(grant, "evals")) {
+    server.registerTool("evals", {
+      description: "Last step after setup. A local chat model completes each task. A local decision model decides if the work is satisfactory. Unavailable when setup has not finished or either model is missing.",
+      inputSchema: {
+        chatModel: z.string().min(1).max(256).optional(),
+        decideModel: z.string().min(1).max(256).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    }, async ({ chatModel, decideModel }) => {
+      if (deps.ready && !(await deps.ready())) return text(JSON.stringify({ state: "unavailable", reason: "setup has not finished" }));
+      const models = deps.models ? await deps.models() : [];
+      const chatId = chatModel ?? models.find((model) => model.kind === "chat" && model.present)?.id;
+      const decideId = decideModel ?? models.find((model) => model.kind === "decide" && model.present)?.id;
+      if (!chatId) return text(JSON.stringify({ state: "unavailable", reason: "no chat model" }));
+      if (!decideId) return text(JSON.stringify({ state: "unavailable", reason: "no decision model" }));
+      const chat = deps.chat;
+      const decide = deps.decide;
+      if (!chat || !decide) return text(JSON.stringify({ state: "unavailable", reason: "no model runtime" }));
+      let host = "no reading";
+      try {
+        const sleep = deps.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+        host = readingText(await collect(deps.host, 1, sleep));
+      } catch {
+        host = "no reading";
+      }
+      const report = await runEvals({
+        context: await deps.context(),
+        host,
+        chatModel: chatId,
+        decideModel: decideId,
+        chat,
+        decide,
+      });
+      return text(JSON.stringify(report));
     });
   }
   if (can(grant, "logs")) {

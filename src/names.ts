@@ -2,7 +2,7 @@
 export const CAPABILITY = "jewell-labs.com/cap/node";
 export const TAG = "tag:node";
 export const AUTHKEY_REF = "op://Mesh/authkey/credential";
-export const TOOLS = ["setup", "ping", "host", "models", "chat", "decide", "logs"] as const;
+export const TOOLS = ["setup", "ping", "host", "models", "chat", "decide", "evals", "logs"] as const;
 export type ToolName = (typeof TOOLS)[number];
 
 export function machineHostname(raw: string): string {
