@@ -1,0 +1,18 @@
+{
+  "grants": [
+    {
+      "src": ["tag:node"],
+      "dst": ["tag:node"],
+      "ip": ["tcp:443"],
+      "app": {
+        "jewell-labs.com/cap/node": [
+          { "bot": "worker", "tools": ["setup", "ping", "host", "models", "chat", "decide", "logs"], "roles": ["node"] }
+        ]
+      }
+    }
+  ],
+  "plugin": {
+    "src": ["REPLACE_ME"],
+    "note": "The Grok plugin cannot take an auth key or a tag. src is the tailnet user. Do not tag that node."
+  }
+}
