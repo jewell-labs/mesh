@@ -20,8 +20,8 @@ interface Task {
 const TASKS: readonly Task[] = [
   {
     id: "join",
-    task: "Write the one setup command for an isolated container. It must run without a prompt and without sudo.",
-    rubric: "The completion is one command, does not use sudo, and does not ask a person to type.",
+    task: "Write the one setup command.",
+    rubric: "True only if the completion is the command mesh setup, with no sudo and no question to a person.",
     includeHost: false,
   },
   {

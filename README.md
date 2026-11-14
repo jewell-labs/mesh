@@ -50,9 +50,9 @@ A cell is `run` only when `docs/evidence/` has a redacted eval. Everything else 
 
 | Environment | join | mcp | evals |
 |---|---|---|---|
-| Mac Studio Linux container | not run | not run | not run |
-| Mac Studio macOS VM | not run | not run | not run |
-| MacBook Pro Linux container | not run | not run | not run |
+| Mac Studio Linux container | not run | run | run |
+| Mac Studio macOS VM | not run | run | run |
+| MacBook Pro Linux container | not run | run | run |
 | MacBook Pro macOS VM | not run | not run | not run |
 | Grok Bot plugin | not run | not run | not run |
 

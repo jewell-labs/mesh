@@ -28,6 +28,13 @@ function has(argv: readonly string[], name: string): boolean {
   return argv.includes(name);
 }
 
+function kindOf(argv: readonly string[]): "container" | "vm" | "plugin" | undefined {
+  const value = flag(argv, "--kind");
+  if (value === undefined) return "container";
+  if (value === "container" || value === "vm" || value === "plugin") return value;
+  return undefined;
+}
+
 async function readText(file: string): Promise<string> {
   try {
     return await readFile(file, "utf8");
@@ -48,7 +55,7 @@ function run(argv: readonly string[]): Promise<CommandResult> {
   });
 }
 
-function liveEnv(): SetupEnv {
+function liveEnv(kind: "container" | "vm" | "plugin"): SetupEnv {
   return {
     readSecret(ref) {
       return new Promise((resolve, reject) => {
@@ -73,13 +80,18 @@ function liveEnv(): SetupEnv {
     },
     hostname: () => os.hostname(),
     async facts() {
-      return { os: os.platform(), arch: os.arch(), kind: "container", userspace: true };
+      return { os: os.platform(), arch: os.arch(), kind, userspace: true };
     },
   };
 }
 
 export async function runCli(io: CliIO): Promise<number> {
   const [command] = io.argv;
+  const kind = kindOf(io.argv);
+  if (kind === undefined) {
+    io.stderr("kind must be container, vm, or plugin\n");
+    return 2;
+  }
   if (command === "setup") {
     const stateDir = flag(io.argv, "--state-dir") ?? path.join(os.homedir(), ".local", "state", "mesh");
     const port = Number(flag(io.argv, "--port") ?? "8787");
@@ -88,7 +100,7 @@ export async function runCli(io: CliIO): Promise<number> {
       return 2;
     }
     await mkdir(stateDir, { recursive: true });
-    const result = await runSetup(io.setupEnv ?? liveEnv(), { stateDir, port, fixture: has(io.argv, "--fixture") });
+    const result = await runSetup(io.setupEnv ?? liveEnv(kind), { stateDir, port, fixture: has(io.argv, "--fixture") });
     io.stdout(result.context.endsWith("\n") ? result.context : `${result.context}\n`);
     return result.ok ? 0 : 1;
   }
@@ -118,7 +130,7 @@ export async function runCli(io: CliIO): Promise<number> {
         return renderContext({
           os: os.platform(),
           arch: os.arch(),
-          kind: "container",
+          kind,
           userspace: true,
           hostname: os.hostname(),
           probes: [],
@@ -152,7 +164,7 @@ export async function runCli(io: CliIO): Promise<number> {
     io.stdout(`listening ${host}:${port}\n`);
     return 0;
   }
-  io.stderr("usage: mesh setup [--fixture] [--state-dir DIR] [--port N]\n       mesh serve [--state-dir DIR] [--port N] [--chat URL] [--decide URL] [--decide-model ID]\n");
+  io.stderr("usage: mesh setup [--fixture] [--kind container|vm|plugin] [--state-dir DIR] [--port N]\n       mesh serve [--kind container|vm|plugin] [--state-dir DIR] [--port N] [--chat URL] [--decide URL] [--decide-model ID]\n");
   return 2;
 }
 
