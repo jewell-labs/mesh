@@ -1,5 +1,0 @@
-{
-  "id": "worker",
-  "enabled": true,
-  "roles": ["node"]
-}
